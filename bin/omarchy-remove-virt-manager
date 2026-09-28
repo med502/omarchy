@@ -3,7 +3,7 @@
 # omarchy:summary=Remove QEMU and Virtual Machine Manager.
 # omarchy:requires-sudo=true
 
-sudo systemctl disable --now virtqemud.socket 2>/dev/null || true
+sudo systemctl disable --now virtqemud.socket virtstoraged.socket 2>/dev/null || true
 omarchy-pkg-drop virt-manager qemu-desktop
 
 echo ""

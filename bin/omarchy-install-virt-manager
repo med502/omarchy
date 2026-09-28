@@ -10,5 +10,5 @@ omarchy-pkg-add qemu-desktop virt-manager
 # and cannot import Arch's system PyGObject bindings. Pin it to system Python.
 sudo sed -i '/env python3/ c\#!/bin/python3' /usr/bin/virt-manager
 
-echo "Starting the libvirt QEMU daemon..."
-sudo systemctl enable --now virtqemud.socket
+echo "Starting the libvirt QEMU and storage daemons..."
+sudo systemctl enable --now virtqemud.socket virtstoraged.socket
