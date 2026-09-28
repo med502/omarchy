@@ -4,11 +4,17 @@
 # omarchy:requires-sudo=true
 
 echo "Installing QEMU and Virtual Machine Manager..."
-omarchy-pkg-add qemu-desktop virt-manager
+omarchy-pkg-add dnsmasq qemu-desktop virt-manager
 
 # virt-manager uses `#!/usr/bin/env python3`, which resolves to mise's Python
 # and cannot import Arch's system PyGObject bindings. Pin it to system Python.
 sudo sed -i '/env python3/ c\#!/bin/python3' /usr/bin/virt-manager
 
-echo "Starting the libvirt QEMU and storage daemons..."
-sudo systemctl enable --now virtqemud.socket virtstoraged.socket
+echo "Starting the libvirt QEMU, storage, and network daemons..."
+sudo systemctl enable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket
+
+# libvirt ships a default NAT network but does not enable it by default.
+sudo virsh net-autostart default
+if ! sudo virsh net-info default | rg -q '^Active:.*yes$'; then
+  sudo virsh net-start default
+fi
