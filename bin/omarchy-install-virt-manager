@@ -18,3 +18,9 @@ sudo virsh net-autostart default
 if ! sudo virsh net-info default | rg -q '^Active:.*yes$'; then
   sudo virsh net-start default
 fi
+
+# UFW's default-deny input policy otherwise drops DHCP and DNS from guests.
+sudo ufw allow in on virbr0 to any port 53 proto tcp comment 'omarchy-libvirt-dns' >/dev/null
+sudo ufw allow in on virbr0 to any port 53 proto udp comment 'omarchy-libvirt-dns' >/dev/null
+sudo ufw allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp' >/dev/null
+sudo ufw reload >/dev/null
