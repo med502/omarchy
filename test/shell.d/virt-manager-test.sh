@@ -40,6 +40,11 @@ if ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto udp comment 'omarc
 fi
 pass "virt-manager allows DNS from guests"
 
+if ! rg -Fq "sudo ufw route allow in on virbr0 comment 'omarchy-libvirt-forward'" "$installer"; then
+  fail "virt-manager allows guest internet access" "Expected $installer to allow forwarded traffic from virbr0."
+fi
+pass "virt-manager allows guest internet access"
+
 if ! rg -Fq 'sudo systemctl disable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$remover"; then
   fail "virt-manager stops required libvirt daemons on removal" "Expected $remover to disable virtqemud.socket, virtstoraged.socket, and virtnetworkd.socket."
 fi
@@ -49,3 +54,8 @@ if ! rg -Fq 'sudo ufw --force delete allow in on virbr0 to any port 67 proto udp
   fail "virt-manager removes its DHCP firewall rule" "Expected $remover to remove the DHCP rule for virbr0."
 fi
 pass "virt-manager removes its DHCP firewall rule"
+
+if ! rg -Fq 'sudo ufw --force delete route allow in on virbr0' "$remover"; then
+  fail "virt-manager removes its forwarding firewall rule" "Expected $remover to remove the forwarding rule for virbr0."
+fi
+pass "virt-manager removes its forwarding firewall rule"

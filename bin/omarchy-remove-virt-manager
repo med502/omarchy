@@ -7,6 +7,7 @@ sudo systemctl disable --now virtqemud.socket virtstoraged.socket virtnetworkd.s
 sudo ufw --force delete allow in on virbr0 to any port 53 proto tcp >/dev/null 2>&1 || true
 sudo ufw --force delete allow in on virbr0 to any port 53 proto udp >/dev/null 2>&1 || true
 sudo ufw --force delete allow in on virbr0 to any port 67 proto udp >/dev/null 2>&1 || true
+sudo ufw --force delete route allow in on virbr0 >/dev/null 2>&1 || true
 sudo ufw reload >/dev/null
 omarchy-pkg-drop dnsmasq virt-manager qemu-desktop
 

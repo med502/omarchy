@@ -23,4 +23,5 @@ fi
 sudo ufw allow in on virbr0 to any port 53 proto tcp comment 'omarchy-libvirt-dns' >/dev/null
 sudo ufw allow in on virbr0 to any port 53 proto udp comment 'omarchy-libvirt-dns' >/dev/null
 sudo ufw allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp' >/dev/null
+sudo ufw route allow in on virbr0 comment 'omarchy-libvirt-forward' >/dev/null
 sudo ufw reload >/dev/null
