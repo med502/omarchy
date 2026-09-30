@@ -209,3 +209,23 @@ if ! rg -Fq "ufw --force delete route allow in on virbr0 comment omarchy-libvirt
   fail "virt-manager removes only owned firewall rules on failure" "Expected $remover to keep the Omarchy ownership marker while cleaning up its firewall rule."
 fi
 pass "virt-manager reports package removal failures without claiming success"
+
+cat >"$fake_bin/sed" <<'SH'
+#!/bin/bash
+if (( $# != 3 )) || [[ $1 != "-i" || $2 != '/env python3/ c\#!/bin/python3' || $3 != "/usr/bin/virt-manager" ]]; then
+  exit 1
+fi
+exec /usr/bin/sed "$1" "$2" "$TEST_LAUNCHER"
+SH
+chmod +x "$fake_bin/sed"
+
+launcher="$test_tmp/virt-manager"
+printf '#!/usr/bin/env python3\nprint("fixture")\n' >"$launcher"
+if ! TEST_LAUNCHER="$launcher" PATH="$fake_bin:$PATH" "$installer" --fix-python >"$output" 2>&1; then
+  fail "virt-manager pins system Python after upgrades" "Expected the real --fix-python mode to edit the isolated launcher."
+fi
+
+if [[ $(head -n 1 "$launcher") != "#!/bin/python3" ]] || ! rg -Fxq 'print("fixture")' "$launcher"; then
+  fail "virt-manager pins system Python after upgrades" "Expected the isolated launcher to use system Python without changing its body."
+fi
+pass "virt-manager pins system Python after upgrades"
