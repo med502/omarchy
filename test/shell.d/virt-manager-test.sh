@@ -4,11 +4,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/base-test.sh"
 
 installer="$ROOT/bin/omarchy-install-virt-manager"
 remover="$ROOT/bin/omarchy-remove-virt-manager"
+python_hook="$ROOT/default/libalpm/hooks/50-omarchy-virt-manager-python.hook"
 
-if ! rg -Fq "sudo sed -i '/env python3/ c\\#!/bin/python3' /usr/bin/virt-manager" "$installer"; then
-  fail "virt-manager uses the system Python" "Expected $installer to replace virt-manager's env Python shebang."
+if ! rg -Fq 'Target = virt-manager' "$python_hook" || ! rg -Fq 'Operation = Upgrade' "$python_hook" || ! rg -Fq "Exec = /usr/bin/sed -i '/env python3/ c\\#!/bin/python3' /usr/bin/virt-manager" "$python_hook"; then
+  fail "virt-manager uses the system Python after upgrades" "Expected $python_hook to restore virt-manager's system Python shebang after package upgrades."
 fi
-pass "virt-manager uses the system Python"
+pass "virt-manager uses the system Python after upgrades"
+
+if ! rg -Fxq 'set -e' "$installer"; then
+  fail "virt-manager stops after setup failures" "Expected $installer to stop when a required setup command fails."
+fi
+pass "virt-manager stops after setup failures"
 
 if ! rg -Fq 'if ! omarchy-pkg-add dnsmasq qemu-desktop virt-manager; then' "$installer"; then
   fail "virt-manager aborts when package installation fails" "Expected $installer to abort if required packages cannot be installed."
@@ -45,10 +51,15 @@ if ! rg -Fq "sudo ufw route allow in on virbr0 comment 'omarchy-libvirt-forward'
 fi
 pass "virt-manager allows guest internet access"
 
-if ! rg -Fq 'sudo systemctl disable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$remover"; then
-  fail "virt-manager stops required libvirt daemons on removal" "Expected $remover to disable virtqemud.socket, virtstoraged.socket, and virtnetworkd.socket."
+if rg -Fq 'systemctl disable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$remover"; then
+  fail "virt-manager preserves shared libvirt sockets" "Expected $remover not to disable sockets that other VM clients may use."
 fi
-pass "virt-manager stops required libvirt daemons on removal"
+pass "virt-manager preserves shared libvirt sockets"
+
+if ! rg -Fq 'if ! omarchy-pkg-drop dnsmasq virt-manager qemu-desktop; then' "$remover"; then
+  fail "virt-manager reports package removal failures" "Expected $remover to stop if its packages cannot be removed."
+fi
+pass "virt-manager reports package removal failures"
 
 if ! rg -Fq 'sudo ufw --force delete allow in on virbr0 to any port 67 proto udp' "$remover"; then
   fail "virt-manager removes its DHCP firewall rule" "Expected $remover to remove the DHCP rule for virbr0."
