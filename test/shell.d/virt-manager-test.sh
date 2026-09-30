@@ -26,16 +26,6 @@ if ! rg -Fq 'sudo systemctl enable --now virtqemud.socket virtstoraged.socket vi
 fi
 pass "virt-manager starts required libvirt daemons"
 
-if ! rg -Fq 'sudo virsh net-autostart default' "$installer" || ! rg -Fq 'sudo virsh net-start default' "$installer"; then
-  fail "virt-manager enables the default network" "Expected $installer to start and enable libvirt's default NAT network."
-fi
-pass "virt-manager enables the default network"
-
-if rg -Fq 'net-start default 2>/dev/null || true' "$installer"; then
-  fail "virt-manager reports network startup failures" "Expected $installer not to mask failure to start the default network."
-fi
-pass "virt-manager reports network startup failures"
-
 if ! rg -Fq "sudo ufw allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp'" "$installer"; then
   fail "virt-manager allows DHCP from guests" "Expected $installer to allow DHCP requests on virbr0."
 fi
@@ -46,8 +36,13 @@ if ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto udp comment 'omarc
 fi
 pass "virt-manager allows DNS from guests"
 
+if ! rg -Fq "sudo ufw route deny in on virbr0 to 10.0.0.0/8 comment 'omarchy-libvirt-private'" "$installer" || ! rg -Fq "sudo ufw route deny in on virbr0 to 172.16.0.0/12 comment 'omarchy-libvirt-private'" "$installer" || ! rg -Fq "sudo ufw route deny in on virbr0 to 192.168.0.0/16 comment 'omarchy-libvirt-private'" "$installer"; then
+  fail "virt-manager protects private networks" "Expected $installer to deny guest forwarding to RFC1918 networks."
+fi
+pass "virt-manager protects private networks"
+
 if ! rg -Fq "sudo ufw route allow in on virbr0 comment 'omarchy-libvirt-forward'" "$installer"; then
-  fail "virt-manager allows guest internet access" "Expected $installer to allow forwarded traffic from virbr0."
+  fail "virt-manager allows guest internet access" "Expected $installer to allow forwarded traffic from virbr0 after private-network denies."
 fi
 pass "virt-manager allows guest internet access"
 
@@ -56,17 +51,115 @@ if rg -Fq 'systemctl disable --now virtqemud.socket virtstoraged.socket virtnetw
 fi
 pass "virt-manager preserves shared libvirt sockets"
 
-if ! rg -Fq 'if ! omarchy-pkg-drop dnsmasq virt-manager qemu-desktop; then' "$remover"; then
-  fail "virt-manager reports package removal failures" "Expected $remover to stop if its packages cannot be removed."
-fi
-pass "virt-manager reports package removal failures"
-
-if ! rg -Fq 'sudo ufw --force delete allow in on virbr0 to any port 67 proto udp' "$remover"; then
-  fail "virt-manager removes its DHCP firewall rule" "Expected $remover to remove the DHCP rule for virbr0."
+if ! rg -Fq "sudo ufw --force delete allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp'" "$remover"; then
+  fail "virt-manager removes its DHCP firewall rule" "Expected $remover to remove only Omarchy's DHCP rule for virbr0."
 fi
 pass "virt-manager removes its DHCP firewall rule"
 
-if ! rg -Fq 'sudo ufw --force delete route allow in on virbr0' "$remover"; then
-  fail "virt-manager removes its forwarding firewall rule" "Expected $remover to remove the forwarding rule for virbr0."
+if ! rg -Fq "sudo ufw --force delete route allow in on virbr0 comment 'omarchy-libvirt-forward'" "$remover"; then
+  fail "virt-manager removes its forwarding firewall rule" "Expected $remover to remove only Omarchy's forwarding rule for virbr0."
 fi
 pass "virt-manager removes its forwarding firewall rule"
+
+if ! rg -Fq "sudo ufw --force delete route deny in on virbr0 to 10.0.0.0/8 comment 'omarchy-libvirt-private'" "$remover" || ! rg -Fq "sudo ufw --force delete route deny in on virbr0 to 172.16.0.0/12 comment 'omarchy-libvirt-private'" "$remover" || ! rg -Fq "sudo ufw --force delete route deny in on virbr0 to 192.168.0.0/16 comment 'omarchy-libvirt-private'" "$remover"; then
+  fail "virt-manager removes its private-network firewall rules" "Expected $remover to remove only Omarchy's private-network deny rules."
+fi
+pass "virt-manager removes its private-network firewall rules"
+
+test_tmp=$(mktemp -d)
+fake_bin="$test_tmp/bin"
+calls="$test_tmp/calls"
+output="$test_tmp/output"
+mkdir -p "$fake_bin"
+trap 'rm -rf "$test_tmp"' EXIT
+
+cat >"$fake_bin/omarchy-pkg-add" <<'SH'
+#!/bin/bash
+exit 0
+SH
+
+cat >"$fake_bin/omarchy-pkg-drop" <<'SH'
+#!/bin/bash
+[[ $TEST_FAILURE == "pkg-drop" ]] && exit 1
+exit 0
+SH
+
+cat >"$fake_bin/sudo" <<'SH'
+#!/bin/bash
+printf '%s\n' "$*" >>"$TEST_CALLS"
+exec "$@"
+SH
+
+cat >"$fake_bin/sed" <<'SH'
+#!/bin/bash
+[[ $TEST_FAILURE == "sed" ]] && exit 1
+exit 0
+SH
+
+cat >"$fake_bin/systemctl" <<'SH'
+#!/bin/bash
+[[ $TEST_FAILURE == "systemctl" ]] && exit 1
+exit 0
+SH
+
+cat >"$fake_bin/virsh" <<'SH'
+#!/bin/bash
+case "$1" in
+  net-autostart)
+    [[ $TEST_FAILURE == "net-autostart" ]] && exit 1
+    exit 0
+    ;;
+  net-info)
+    printf 'Active: no\n'
+    ;;
+  net-start)
+    [[ $TEST_FAILURE == "net-start" ]] && exit 1
+    exit 0
+    ;;
+esac
+SH
+
+cat >"$fake_bin/ufw" <<'SH'
+#!/bin/bash
+printf 'ufw %s\n' "$*" >>"$TEST_CALLS"
+SH
+
+chmod +x "$fake_bin"/*
+
+for failure in sed systemctl net-autostart net-start; do
+  : >"$calls"
+  if TEST_CALLS="$calls" TEST_FAILURE="$failure" PATH="$fake_bin:$PATH" "$installer" >"$output" 2>&1; then
+    fail "virt-manager reports $failure setup failures" "Expected $installer to return a failure when $failure fails."
+  fi
+
+  if rg -Fq 'ufw ' "$calls"; then
+    fail "virt-manager stops setup after $failure fails" "Expected $installer not to apply firewall rules after $failure fails."
+  fi
+done
+pass "virt-manager reports setup failures before firewall configuration"
+
+: >"$calls"
+if ! TEST_CALLS="$calls" TEST_FAILURE="" PATH="$fake_bin:$PATH" "$installer" >"$output" 2>&1; then
+  fail "virt-manager configures guest networking" "Expected $installer to succeed when all setup commands succeed."
+fi
+
+last_private_deny=$(rg -n '^ufw route deny in on virbr0 to ' "$calls" | tail -n1 | cut -d: -f1)
+forward_allow=$(rg -n '^ufw route allow in on virbr0 comment omarchy-libvirt-forward$' "$calls" | head -n1 | cut -d: -f1)
+if [[ -z $last_private_deny || -z $forward_allow ]] || (( last_private_deny >= forward_allow )); then
+  fail "virt-manager blocks private networks before internet forwarding" "Expected private-network denies to be added before the guest internet-forwarding rule."
+fi
+pass "virt-manager blocks private networks before internet forwarding"
+
+: >"$calls"
+if TEST_CALLS="$calls" TEST_FAILURE="pkg-drop" PATH="$fake_bin:$PATH" "$remover" >"$output" 2>&1; then
+  fail "virt-manager reports package removal failures" "Expected $remover to return a failure when package removal fails."
+fi
+
+if ! rg -Fq 'Package removal failed' "$output" || rg -Fq 'QEMU and Virtual Machine Manager have been removed.' "$output"; then
+  fail "virt-manager does not report failed removal as complete" "Expected $remover to report the package failure without its success message."
+fi
+
+if ! rg -Fq "ufw --force delete route allow in on virbr0 comment omarchy-libvirt-forward" "$calls"; then
+  fail "virt-manager removes only owned firewall rules on failure" "Expected $remover to keep the Omarchy ownership marker while cleaning up its firewall rule."
+fi
+pass "virt-manager reports package removal failures without claiming success"
