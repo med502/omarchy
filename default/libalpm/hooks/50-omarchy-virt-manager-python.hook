@@ -7,4 +7,4 @@ Target = virt-manager
 [Action]
 Description = Pinning virt-manager to the system Python...
 When = PostTransaction
-Exec = /usr/bin/sed -i '/env python3/ c\#!/bin/python3' /usr/bin/virt-manager
+Exec = /usr/bin/omarchy-install-virt-manager --fix-python

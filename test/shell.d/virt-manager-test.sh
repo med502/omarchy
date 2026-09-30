@@ -3,16 +3,18 @@
 source "$(dirname "${BASH_SOURCE[0]}")/base-test.sh"
 
 installer="$ROOT/bin/omarchy-install-virt-manager"
+setup="$installer"
 remover="$ROOT/bin/omarchy-remove-virt-manager"
 python_hook="$ROOT/default/libalpm/hooks/50-omarchy-virt-manager-python.hook"
+menu="$ROOT/default/omarchy/omarchy-menu.jsonc"
 
-if ! rg -Fq 'Target = virt-manager' "$python_hook" || ! rg -Fq 'Operation = Upgrade' "$python_hook" || ! rg -Fq "Exec = /usr/bin/sed -i '/env python3/ c\\#!/bin/python3' /usr/bin/virt-manager" "$python_hook"; then
-  fail "virt-manager uses the system Python after upgrades" "Expected $python_hook to restore virt-manager's system Python shebang after package upgrades."
+if ! rg -Fq 'Target = virt-manager' "$python_hook" || ! rg -Fq 'Operation = Upgrade' "$python_hook" || ! rg -Fq 'Exec = /usr/bin/omarchy-install-virt-manager --fix-python' "$python_hook" || ! rg -Fq "sed -i '/env python3/ c\\#!/bin/python3' /usr/bin/virt-manager" "$installer"; then
+  fail "virt-manager uses the system Python after upgrades" "Expected $python_hook to run the shebang helper after package upgrades."
 fi
 pass "virt-manager uses the system Python after upgrades"
 
-if ! rg -Fxq 'set -e' "$installer"; then
-  fail "virt-manager stops after setup failures" "Expected $installer to stop when a required setup command fails."
+if ! rg -Fxq 'set -e' "$setup"; then
+  fail "virt-manager stops after setup failures" "Expected $setup to stop when a required setup command fails."
 fi
 pass "virt-manager stops after setup failures"
 
@@ -21,30 +23,40 @@ if ! rg -Fq 'if ! omarchy-pkg-add dnsmasq qemu-desktop virt-manager; then' "$ins
 fi
 pass "virt-manager aborts when package installation fails"
 
-if ! rg -Fq 'sudo systemctl enable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$installer"; then
-  fail "virt-manager starts required libvirt daemons" "Expected $installer to enable virtqemud.socket, virtstoraged.socket, and virtnetworkd.socket."
+if ! rg -Fq 'if [[ $1 == "--fix-python" ]]; then' "$installer"; then
+  fail "virt-manager keeps Python setup in the installer" "Expected $installer to provide the hook's Python-fix mode."
+fi
+pass "virt-manager keeps Python setup in the installer"
+
+if ! rg -Fq 'sudo systemctl enable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$setup"; then
+  fail "virt-manager starts required libvirt daemons" "Expected $setup to enable virtqemud.socket, virtstoraged.socket, and virtnetworkd.socket."
 fi
 pass "virt-manager starts required libvirt daemons"
 
-if ! rg -Fq "sudo ufw allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp'" "$installer"; then
-  fail "virt-manager allows DHCP from guests" "Expected $installer to allow DHCP requests on virbr0."
+if ! rg -Fq "sudo ufw allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp'" "$setup"; then
+  fail "virt-manager allows DHCP from guests" "Expected $setup to allow DHCP requests on virbr0."
 fi
 pass "virt-manager allows DHCP from guests"
 
-if ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto udp comment 'omarchy-libvirt-dns'" "$installer" || ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto tcp comment 'omarchy-libvirt-dns'" "$installer"; then
-  fail "virt-manager allows DNS from guests" "Expected $installer to allow TCP and UDP DNS requests on virbr0."
+if ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto udp comment 'omarchy-libvirt-dns'" "$setup" || ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto tcp comment 'omarchy-libvirt-dns'" "$setup"; then
+  fail "virt-manager allows DNS from guests" "Expected $setup to allow TCP and UDP DNS requests on virbr0."
 fi
 pass "virt-manager allows DNS from guests"
 
-if ! rg -Fq "sudo ufw route deny in on virbr0 to 10.0.0.0/8 comment 'omarchy-libvirt-private'" "$installer" || ! rg -Fq "sudo ufw route deny in on virbr0 to 172.16.0.0/12 comment 'omarchy-libvirt-private'" "$installer" || ! rg -Fq "sudo ufw route deny in on virbr0 to 192.168.0.0/16 comment 'omarchy-libvirt-private'" "$installer"; then
-  fail "virt-manager protects private networks" "Expected $installer to deny guest forwarding to RFC1918 networks."
+if ! rg -Fq "sudo ufw route deny in on virbr0 to 10.0.0.0/8 comment 'omarchy-libvirt-private'" "$setup" || ! rg -Fq "sudo ufw route deny in on virbr0 to 172.16.0.0/12 comment 'omarchy-libvirt-private'" "$setup" || ! rg -Fq "sudo ufw route deny in on virbr0 to 192.168.0.0/16 comment 'omarchy-libvirt-private'" "$setup"; then
+  fail "virt-manager protects private networks" "Expected $setup to deny guest forwarding to RFC1918 networks."
 fi
 pass "virt-manager protects private networks"
 
-if ! rg -Fq "sudo ufw route allow in on virbr0 comment 'omarchy-libvirt-forward'" "$installer"; then
-  fail "virt-manager allows guest internet access" "Expected $installer to allow forwarded traffic from virbr0 after private-network denies."
+if ! rg -Fq "sudo ufw route allow in on virbr0 comment 'omarchy-libvirt-forward'" "$setup"; then
+  fail "virt-manager allows guest internet access" "Expected $setup to allow forwarded traffic from virbr0 after private-network denies."
 fi
 pass "virt-manager allows guest internet access"
+
+if ! rg -Fq '"setup.virt-manager"' "$menu" || ! rg -Fq '"when":"omarchy-pkg-present virt-manager"' "$menu" || ! rg -Fq 'omarchy-install-virt-manager' "$menu"; then
+  fail "virt-manager setup can be retried from the menu" "Expected Setup to offer virt-manager configuration whenever virt-manager is installed."
+fi
+pass "virt-manager setup can be retried from the menu"
 
 if rg -Fq 'systemctl disable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$remover"; then
   fail "virt-manager preserves shared libvirt sockets" "Expected $remover not to disable sockets that other VM clients may use."
@@ -90,9 +102,9 @@ printf '%s\n' "$*" >>"$TEST_CALLS"
 exec "$@"
 SH
 
-cat >"$fake_bin/sed" <<'SH'
+cat >"$fake_bin/omarchy-install-virt-manager" <<'SH'
 #!/bin/bash
-[[ $TEST_FAILURE == "sed" ]] && exit 1
+[[ $TEST_FAILURE == "python-helper" ]] && exit 1
 exit 0
 SH
 
@@ -110,6 +122,7 @@ case "$1" in
     exit 0
     ;;
   net-info)
+    [[ $TEST_FAILURE == "net-info" ]] && exit 1
     printf 'Active: no\n'
     ;;
   net-start)
@@ -121,26 +134,59 @@ SH
 
 cat >"$fake_bin/ufw" <<'SH'
 #!/bin/bash
+[[ $TEST_FAILURE == "ufw" ]] && exit 1
 printf 'ufw %s\n' "$*" >>"$TEST_CALLS"
 SH
 
 chmod +x "$fake_bin"/*
 
-for failure in sed systemctl net-autostart net-start; do
+for failure in python-helper systemctl net-autostart net-info net-start; do
   : >"$calls"
-  if TEST_CALLS="$calls" TEST_FAILURE="$failure" PATH="$fake_bin:$PATH" "$installer" >"$output" 2>&1; then
-    fail "virt-manager reports $failure setup failures" "Expected $installer to return a failure when $failure fails."
+  if TEST_CALLS="$calls" TEST_FAILURE="$failure" PATH="$fake_bin:$PATH" "$setup" >"$output" 2>&1; then
+    fail "virt-manager reports $failure setup failures" "Expected $setup to return a failure when $failure fails."
+  fi
+
+  case "$failure" in
+    python-helper)
+      expected_error="Failed to configure virt-manager to use the system Python"
+      ;;
+    systemctl)
+      expected_error="Failed to enable libvirt services"
+      ;;
+    net-autostart)
+      expected_error="Failed to enable the default libvirt network"
+      ;;
+    net-info)
+      expected_error="Failed to check the default libvirt network"
+      ;;
+    net-start)
+      expected_error="Failed to start the default libvirt network"
+      ;;
+  esac
+
+  if ! rg -Fq "$expected_error" "$output"; then
+    fail "virt-manager explains $failure setup failures" "Expected $setup to report why $failure failed."
   fi
 
   if rg -Fq 'ufw ' "$calls"; then
-    fail "virt-manager stops setup after $failure fails" "Expected $installer not to apply firewall rules after $failure fails."
+    fail "virt-manager stops setup after $failure fails" "Expected $setup not to apply firewall rules after $failure fails."
   fi
 done
 pass "virt-manager reports setup failures before firewall configuration"
 
 : >"$calls"
-if ! TEST_CALLS="$calls" TEST_FAILURE="" PATH="$fake_bin:$PATH" "$installer" >"$output" 2>&1; then
-  fail "virt-manager configures guest networking" "Expected $installer to succeed when all setup commands succeed."
+if TEST_CALLS="$calls" TEST_FAILURE="ufw" PATH="$fake_bin:$PATH" "$setup" >"$output" 2>&1; then
+  fail "virt-manager reports firewall setup failures" "Expected $setup to return a failure when UFW configuration fails."
+fi
+
+if ! rg -Fq 'Failed to allow DNS over TCP for virtual machines' "$output"; then
+  fail "virt-manager explains firewall setup failures" "Expected $setup to explain the UFW configuration failure."
+fi
+pass "virt-manager explains firewall setup failures"
+
+: >"$calls"
+if ! TEST_CALLS="$calls" TEST_FAILURE="" PATH="$fake_bin:$PATH" "$setup" >"$output" 2>&1; then
+  fail "virt-manager configures guest networking" "Expected $setup to succeed when all setup commands succeed."
 fi
 
 last_private_deny=$(rg -n '^ufw route deny in on virbr0 to ' "$calls" | tail -n1 | cut -d: -f1)
