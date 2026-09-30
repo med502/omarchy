@@ -4,7 +4,10 @@
 # omarchy:requires-sudo=true
 
 echo "Installing QEMU and Virtual Machine Manager..."
-omarchy-pkg-add dnsmasq qemu-desktop virt-manager
+if ! omarchy-pkg-add dnsmasq qemu-desktop virt-manager; then
+  echo "Package installation failed"
+  exit 1
+fi
 
 # virt-manager uses `#!/usr/bin/env python3`, which resolves to mise's Python
 # and cannot import Arch's system PyGObject bindings. Pin it to system Python.

@@ -10,10 +10,10 @@ if ! rg -Fq "sudo sed -i '/env python3/ c\\#!/bin/python3' /usr/bin/virt-manager
 fi
 pass "virt-manager uses the system Python"
 
-if ! rg -Fq 'omarchy-pkg-add dnsmasq qemu-desktop virt-manager' "$installer"; then
-  fail "virt-manager installs DNS for virtual networks" "Expected $installer to install dnsmasq."
+if ! rg -Fq 'if ! omarchy-pkg-add dnsmasq qemu-desktop virt-manager; then' "$installer"; then
+  fail "virt-manager aborts when package installation fails" "Expected $installer to abort if required packages cannot be installed."
 fi
-pass "virt-manager installs DNS for virtual networks"
+pass "virt-manager aborts when package installation fails"
 
 if ! rg -Fq 'sudo systemctl enable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$installer"; then
   fail "virt-manager starts required libvirt daemons" "Expected $installer to enable virtqemud.socket, virtstoraged.socket, and virtnetworkd.socket."
