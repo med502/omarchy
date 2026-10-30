@@ -12,6 +12,15 @@ calls="$test_tmp/calls"
 output="$test_tmp/output"
 mkdir -p "$fake_bin"
 trap 'rm -rf "$test_tmp"' EXIT
+export TEST_HOOK="$test_tmp/50-omarchy-virt-manager-python.hook"
+
+cat >"$fake_bin/install" <<'SH'
+#!/bin/bash
+[[ $TEST_FAILURE == "hook-install" ]] && exit 1
+(( $# == 3 )) || exit 1
+[[ $1 == "-Dm644" && $3 == "/etc/pacman.d/hooks/50-omarchy-virt-manager-python.hook" ]] || exit 1
+exec /usr/bin/install "$1" "$2" "$TEST_HOOK"
+SH
 
 cat >"$fake_bin/omarchy-pkg-add" <<'SH'
 #!/bin/bash
@@ -68,13 +77,16 @@ SH
 
 chmod +x "$fake_bin"/*
 
-for failure in python-helper systemctl net-autostart net-info net-start; do
+for failure in hook-install python-helper systemctl net-autostart net-info net-start; do
   : >"$calls"
   if TEST_CALLS="$calls" TEST_FAILURE="$failure" PATH="$fake_bin:$PATH" "$setup" >"$output" 2>&1; then
     fail "virt-manager reports $failure setup failures" "Expected $setup to return a failure when $failure fails."
   fi
 
   case "$failure" in
+    hook-install)
+      expected_error="Failed to install the virt-manager Python upgrade hook"
+      ;;
     python-helper)
       expected_error="Failed to configure virt-manager to use the system Python"
       ;;
@@ -123,6 +135,11 @@ if [[ -z $last_private_deny || -z $forward_allow ]] || (( last_private_deny >= f
   fail "virt-manager blocks private networks before internet forwarding" "Expected private-network denies to be added before the guest internet-forwarding rule."
 fi
 pass "virt-manager blocks private networks before internet forwarding"
+
+if ! cmp -s "$ROOT/install/virt-manager/50-omarchy-virt-manager-python.hook" "$TEST_HOOK"; then
+  fail "virt-manager installs its upgrade hook" "Expected setup to install the shipped hook for future package upgrades."
+fi
+pass "virt-manager installs its upgrade hook"
 
 : >"$calls"
 if TEST_CALLS="$calls" TEST_FAILURE="pkg-drop" PATH="$fake_bin:$PATH" "$remover" >"$output" 2>&1; then

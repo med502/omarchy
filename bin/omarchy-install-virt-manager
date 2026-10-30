@@ -14,6 +14,12 @@ else
     exit 1
   fi
 
+  # Optional software owns its hook setup; install/ ships with Omarchy.
+  if ! sudo install -Dm644 "$OMARCHY_PATH/install/virt-manager/50-omarchy-virt-manager-python.hook" /etc/pacman.d/hooks/50-omarchy-virt-manager-python.hook; then
+    echo "Failed to install the virt-manager Python upgrade hook"
+    exit 1
+  fi
+
   # The pacman hook repeats this edit after every virt-manager upgrade.
   if ! sudo omarchy-install-virt-manager --fix-python; then
     echo "Failed to configure virt-manager to use the system Python"
