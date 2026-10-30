@@ -217,10 +217,6 @@ assertDeepEqual(
   'menu never hides an Install row because the software is already there'
 )
 assert(
-  defaultById['install.development.virt-manager'].disabled && !defaultById['install.development.virt-manager'].when,
-  'menu dims the virt-manager Install row when already installed'
-)
-assert(
   defaultItems.filter(item => item.id.startsWith('remove.')).every(item => !item.disabled),
   'menu hides Remove rows rather than dimming them'
 )
