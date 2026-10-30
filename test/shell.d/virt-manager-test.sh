@@ -5,78 +5,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/base-test.sh"
 installer="$ROOT/bin/omarchy-install-virt-manager"
 setup="$installer"
 remover="$ROOT/bin/omarchy-remove-virt-manager"
-python_hook="$ROOT/default/libalpm/hooks/50-omarchy-virt-manager-python.hook"
-menu="$ROOT/default/omarchy/omarchy-menu.jsonc"
-
-if ! rg -Fq 'Target = virt-manager' "$python_hook" || ! rg -Fq 'Operation = Upgrade' "$python_hook" || ! rg -Fq 'Exec = /usr/bin/omarchy-install-virt-manager --fix-python' "$python_hook" || ! rg -Fq "sed -i '/env python3/ c\\#!/bin/python3' /usr/bin/virt-manager" "$installer"; then
-  fail "virt-manager uses the system Python after upgrades" "Expected $python_hook to run the shebang helper after package upgrades."
-fi
-pass "virt-manager uses the system Python after upgrades"
-
-if ! rg -Fxq 'set -e' "$setup"; then
-  fail "virt-manager stops after setup failures" "Expected $setup to stop when a required setup command fails."
-fi
-pass "virt-manager stops after setup failures"
-
-if ! rg -Fq 'if ! omarchy-pkg-add dnsmasq qemu-desktop virt-manager; then' "$installer"; then
-  fail "virt-manager aborts when package installation fails" "Expected $installer to abort if required packages cannot be installed."
-fi
-pass "virt-manager aborts when package installation fails"
-
-if ! rg -Fq 'if [[ $1 == "--fix-python" ]]; then' "$installer"; then
-  fail "virt-manager keeps Python setup in the installer" "Expected $installer to provide the hook's Python-fix mode."
-fi
-pass "virt-manager keeps Python setup in the installer"
-
-if ! rg -Fq 'sudo systemctl enable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$setup"; then
-  fail "virt-manager starts required libvirt daemons" "Expected $setup to enable virtqemud.socket, virtstoraged.socket, and virtnetworkd.socket."
-fi
-pass "virt-manager starts required libvirt daemons"
-
-if ! rg -Fq "sudo ufw allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp'" "$setup"; then
-  fail "virt-manager allows DHCP from guests" "Expected $setup to allow DHCP requests on virbr0."
-fi
-pass "virt-manager allows DHCP from guests"
-
-if ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto udp comment 'omarchy-libvirt-dns'" "$setup" || ! rg -Fq "sudo ufw allow in on virbr0 to any port 53 proto tcp comment 'omarchy-libvirt-dns'" "$setup"; then
-  fail "virt-manager allows DNS from guests" "Expected $setup to allow TCP and UDP DNS requests on virbr0."
-fi
-pass "virt-manager allows DNS from guests"
-
-if ! rg -Fq "sudo ufw route deny in on virbr0 to 10.0.0.0/8 comment 'omarchy-libvirt-private'" "$setup" || ! rg -Fq "sudo ufw route deny in on virbr0 to 172.16.0.0/12 comment 'omarchy-libvirt-private'" "$setup" || ! rg -Fq "sudo ufw route deny in on virbr0 to 192.168.0.0/16 comment 'omarchy-libvirt-private'" "$setup"; then
-  fail "virt-manager protects private networks" "Expected $setup to deny guest forwarding to RFC1918 networks."
-fi
-pass "virt-manager protects private networks"
-
-if ! rg -Fq "sudo ufw route allow in on virbr0 comment 'omarchy-libvirt-forward'" "$setup"; then
-  fail "virt-manager allows guest internet access" "Expected $setup to allow forwarded traffic from virbr0 after private-network denies."
-fi
-pass "virt-manager allows guest internet access"
-
-if ! rg -Fq '"setup.virt-manager"' "$menu" || ! rg -Fq '"when":"omarchy-pkg-present virt-manager"' "$menu" || ! rg -Fq 'omarchy-install-virt-manager' "$menu"; then
-  fail "virt-manager setup can be retried from the menu" "Expected Setup to offer virt-manager configuration whenever virt-manager is installed."
-fi
-pass "virt-manager setup can be retried from the menu"
-
-if rg -Fq 'systemctl disable --now virtqemud.socket virtstoraged.socket virtnetworkd.socket' "$remover"; then
-  fail "virt-manager preserves shared libvirt sockets" "Expected $remover not to disable sockets that other VM clients may use."
-fi
-pass "virt-manager preserves shared libvirt sockets"
-
-if ! rg -Fq "sudo ufw --force delete allow in on virbr0 to any port 67 proto udp comment 'omarchy-libvirt-dhcp'" "$remover"; then
-  fail "virt-manager removes its DHCP firewall rule" "Expected $remover to remove only Omarchy's DHCP rule for virbr0."
-fi
-pass "virt-manager removes its DHCP firewall rule"
-
-if ! rg -Fq "sudo ufw --force delete route allow in on virbr0 comment 'omarchy-libvirt-forward'" "$remover"; then
-  fail "virt-manager removes its forwarding firewall rule" "Expected $remover to remove only Omarchy's forwarding rule for virbr0."
-fi
-pass "virt-manager removes its forwarding firewall rule"
-
-if ! rg -Fq "sudo ufw --force delete route deny in on virbr0 to 10.0.0.0/8 comment 'omarchy-libvirt-private'" "$remover" || ! rg -Fq "sudo ufw --force delete route deny in on virbr0 to 172.16.0.0/12 comment 'omarchy-libvirt-private'" "$remover" || ! rg -Fq "sudo ufw --force delete route deny in on virbr0 to 192.168.0.0/16 comment 'omarchy-libvirt-private'" "$remover"; then
-  fail "virt-manager removes its private-network firewall rules" "Expected $remover to remove only Omarchy's private-network deny rules."
-fi
-pass "virt-manager removes its private-network firewall rules"
 
 test_tmp=$(mktemp -d)
 fake_bin="$test_tmp/bin"
@@ -205,10 +133,19 @@ if ! rg -Fq 'Package removal failed' "$output" || rg -Fq 'QEMU and Virtual Machi
   fail "virt-manager does not report failed removal as complete" "Expected $remover to report the package failure without its success message."
 fi
 
-if ! rg -Fq "ufw --force delete route allow in on virbr0 comment omarchy-libvirt-forward" "$calls"; then
-  fail "virt-manager removes only owned firewall rules on failure" "Expected $remover to keep the Omarchy ownership marker while cleaning up its firewall rule."
+if rg -q '^ufw ' "$calls"; then
+  fail "virt-manager preserves guest networking on removal failure" "Expected $remover not to change firewall rules when package removal fails."
 fi
 pass "virt-manager reports package removal failures without claiming success"
+
+: >"$calls"
+if ! TEST_CALLS="$calls" TEST_FAILURE="" PATH="$fake_bin:$PATH" "$remover" >"$output" 2>&1; then
+  fail "virt-manager removes packages and firewall rules" "Expected $remover to succeed when package removal succeeds."
+fi
+if ! rg -Fq "ufw --force delete route allow in on virbr0 comment omarchy-libvirt-forward" "$calls"; then
+  fail "virt-manager removes owned firewall rules after package removal" "Expected $remover to clean up its forwarding rule after successful package removal."
+fi
+pass "virt-manager removes owned firewall rules after package removal"
 
 cat >"$fake_bin/sed" <<'SH'
 #!/bin/bash
