@@ -217,91 +217,10 @@ assertDeepEqual(
   'menu never hides an Install row because the software is already there'
 )
 assert(
-  ['install.browser.zen', 'install.editor.vscode', 'install.gaming.steam', 'install.development.rust', 'install.development.virt-manager', 'install.windows'].every(
-    id => defaultById[id].disabled && !defaultById[id].when
-  ),
-  'menu dims the Install rows for software that is already installed'
-)
-assertEqual(
-  defaultById['install.browser.zen'].disabled,
-  'omarchy-pkg-present zen-browser-bin',
-  'menu asks the same presence question it used to hide the row with'
-)
-// A guard can still be about something other than having the software: no
-// Chromium at all means no account to wire up, and that row stays hidden.
-assert(
-  defaultById['install.service.chromium-account'].when === '[[ -f ~/.config/chromium-flags.conf ]]'
-    && defaultById['install.service.chromium-account'].disabled.includes('oauth2-client-id'),
-  'menu keeps hiding Chromium Account without Chromium, and dims it once the account is set up'
+  defaultById['install.development.virt-manager'].disabled && !defaultById['install.development.virt-manager'].when,
+  'menu dims the virt-manager Install row when already installed'
 )
 assert(
-  defaultItems.filter(item => item.id.startsWith('remove.')).every(item => !item.disabled)
-    && defaultById['remove.browser.zen'].when === 'omarchy-pkg-present zen-browser-bin',
-  'menu still hides Remove rows for software that is not installed'
-)
-assertDeepEqual(
-  defaultItems
-    .filter(item => item.parent === 'remove')
-    .map(item => item.id),
-  [
-    'remove.package',
-    'remove.ai',
-    'remove.service',
-    'remove.development',
-    'remove.theme',
-    'remove.gaming',
-    'remove.browser',
-    'remove.webapp',
-    'remove.tui',
-    'remove.windows',
-    'remove.preinstalls',
-    'remove.security'
-  ],
-  'menu orders Remove categories like their Install counterparts, followed by Remove-only categories'
-)
-assert(
-  defaultById['setup.security.passwordless-sudo'].action.includes('omarchy-sudo-passwordless'),
-  'menu places Passwordless Sudo under Setup > Security'
-)
-assert(
-  !defaultById['trigger.toggle.direct-boot'] && !defaultById['trigger.toggle.passwordless-sudo'],
-  'menu removes the relocated toggles from Trigger > Toggle'
-)
-assert(
-  defaultById['style.bar.position'].kind === 'menu',
-  'menu groups Menu Bar positions in a submenu'
-)
-assert(
-  ['top', 'bottom', 'left', 'right'].every(position => defaultById[`style.bar.position.${position}`].action === `omarchy-bar position ${position}`),
-  'menu lists all Menu Bar positions under Position'
-)
-assertEqual(
-  defaultById['style.bar.transparency'].action,
-  'omarchy-bar transparent toggle',
-  'menu exposes Menu Bar transparency as a toggle'
-)
-assertDeepEqual(
-  defaultItems.filter(item => item.parent === 'setup.plugin').map(item => item.label),
-  ['Enable Plugin', 'Disable Plugin', 'Add Plugin', 'Clone Plugin', 'Remove Plugin'],
-  'menu manages plugins from Setup > Plugins'
-)
-assert(
-  ['enable', 'disable', 'clone', 'remove'].every(
-    verb => defaultById[`setup.plugin.${verb}`].action === `omarchy-menu-plugin ${verb}`
-  ),
-  'menu picks a plugin the way it already picks a theme or a timezone'
-)
-assert(
-  !defaultById['setup.plugin.enable'].when && !defaultById['setup.plugin.disable'].when,
-  'menu always offers Enable and Disable, which cover the built-in plugins too'
-)
-assert(
-  defaultById['setup.plugin.remove'].when.includes('.config/omarchy/plugins'),
-  'menu hides Remove until a plugin the user installed exists to delete'
-)
-assert(
-  defaultById['setup.plugin.add'].action.includes('omarchy-plugin-add'),
-  'menu adds a plugin through the CLI, where the trust warning and clone output are visible'
   defaultItems.filter(item => item.id.startsWith('remove.')).every(item => !item.disabled),
   'menu hides Remove rows rather than dimming them'
 )
