@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 source "$(dirname "${BASH_SOURCE[0]}")/base-test.sh"
 
 installer="$ROOT/bin/omarchy-install-virt-manager"
